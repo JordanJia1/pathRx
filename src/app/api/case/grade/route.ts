@@ -20,12 +20,9 @@ function buildStepContext(p: any, step: number) {
         `Age ${p.age}`,
         `Sex ${p.sex}`,
         `BMI ${p.bmi}`,
-        `ASCVD=${p.comorbidities.ascvd}`,
-        `HF=${p.comorbidities.hf}`,
-        `CKD=${p.comorbidities.ckd}`,
         `On metformin=${p.baseline.onMetformin}`
       ],
-      hidden: ["A1C", "eGFR", "Cost"]
+      hidden: ["A1C", "eGFR", "Cost", "ASCVD", "HF", "CKD"]
     };
   }
   if (s === 2) {
@@ -35,12 +32,9 @@ function buildStepContext(p: any, step: number) {
         `Sex ${p.sex}`,
         `BMI ${p.bmi}`,
         `A1C ${p.a1c}`,
-        `ASCVD=${p.comorbidities.ascvd}`,
-        `HF=${p.comorbidities.hf}`,
-        `CKD=${p.comorbidities.ckd}`,
         `On metformin=${p.baseline.onMetformin}`
       ],
-      hidden: ["eGFR", "Cost"]
+      hidden: ["eGFR", "Cost", "ASCVD", "HF", "CKD"]
     };
   }
   return {
@@ -51,12 +45,9 @@ function buildStepContext(p: any, step: number) {
       `A1C ${p.a1c}`,
       `eGFR ${p.egfr}`,
       `Cost ${p.cost}`,
-      `ASCVD=${p.comorbidities.ascvd}`,
-      `HF=${p.comorbidities.hf}`,
-      `CKD=${p.comorbidities.ckd}`,
       `On metformin=${p.baseline.onMetformin}`
     ],
-    hidden: [] as string[]
+    hidden: ["ASCVD", "HF", "CKD"] as string[]
   };
 }
 
@@ -100,7 +91,7 @@ Minimize cognitive load: short bullets, no paragraphs.
 
 Learning theory:
 - Script theory: cue → pattern → action
-- Interleaving: mention how comorbidities change choice
+- Interleaving: compare options across released markers only
 
 Patient truth data:
 ${stepContext.visible.map((v) => `- ${v}`).join("\n")}
@@ -124,6 +115,7 @@ Rules:
   If you don’t want to name a drug, set it to "none".
 - expert.bullets: 3–6 bullets, each <= 18 words.
 - Never reference hidden markers, hidden values, or conclusions that require hidden markers.
+- Do not infer, assume, or mention comorbidity status unless explicitly visible.
 `;
 
     const format = {
