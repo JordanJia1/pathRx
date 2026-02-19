@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Lock } from "lucide-react";
 
 export type Patient = {
   age: number;
@@ -39,7 +40,14 @@ export function PatientVisual({
   if (patient.onMetformin) tags.push("On metformin");
   const hidden = new Set(hiddenFields ?? []);
   const value = (field: VitalField, text: string) =>
-    hidden.has(field) ? <span className="text-muted-foreground">Locked</span> : text;
+    hidden.has(field) ? (
+      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-muted-foreground">
+        <Lock className="h-3.5 w-3.5" />
+        Locked
+      </span>
+    ) : (
+      text
+    );
 
   return (
     <Card className="rounded-2xl">

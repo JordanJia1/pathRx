@@ -119,6 +119,57 @@ function getStepRelease(currentStep: number): {
   };
 }
 
+function buildSafeSummaryBullets({
+  currentStep,
+  patient,
+  hiddenFields,
+  sourceBullets
+}: {
+  currentStep: number;
+  patient?: Patient;
+  hiddenFields: VitalField[];
+  sourceBullets: string[];
+}) {
+  const hidden = new Set(hiddenFields);
+  const treatmentHint = /(sglt2|glp-?1|dpp-?4|insulin|sulfonylurea|metformin|pioglitazone|drug)/i;
+
+  if (currentStep === 1) {
+    return [
+      "Initial triage with limited data; focus on safe first-pass intervention.",
+      "Do not assume renal status or cost constraints yet.",
+      "State key uncertainty and your immediate plan."
+    ];
+  }
+  if (currentStep === 2) {
+    return [
+      `A1C now available${patient ? `: ${patient.a1c}%` : ""}.`,
+      "Renal function and cost are still locked.",
+      "Re-evaluate intervention based on glycemic severity."
+    ];
+  }
+  if (currentStep === 3) {
+    return [
+      `A1C: ${patient?.a1c ?? "n/a"}%, eGFR: ${patient?.egfr ?? "n/a"}, cost: ${patient?.cost ?? "n/a"}.`,
+      "All baseline vitals are now released.",
+      "Choose intervention using benefit, safety, and access tradeoffs."
+    ];
+  }
+
+  const masked = sourceBullets
+    .map((b) => {
+      let out = b;
+      if (hidden.has("a1c")) out = out.replace(/\bA1C\b[^,.;)]+/gi, "A1C [locked]");
+      if (hidden.has("egfr")) out = out.replace(/\beGFR\b[^,.;)]+/gi, "eGFR [locked]");
+      if (hidden.has("cost")) out = out.replace(/\bcost\b[^,.;)]+/gi, "cost [locked]");
+      return out;
+    })
+    .filter((b) => !treatmentHint.test(b));
+
+  return masked.length
+    ? masked.slice(0, 3)
+    : ["Use the released data only and avoid assumptions from locked markers."];
+}
+
 export default function CaseSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
@@ -193,6 +244,12 @@ export default function CaseSessionPage() {
 
   const release = getStepRelease(Math.min(currentStep, PRE_MUTATION_STEPS));
   const hiddenFields = isMutationPhase || isComplete ? [] : release.hiddenFields;
+  const safeSummaryBullets = buildSafeSummaryBullets({
+    currentStep,
+    patient: visiblePatient,
+    hiddenFields,
+    sourceBullets: visibleSummary.bullets
+  });
   const latestFeedback = feedbackRounds[feedbackRounds.length - 1];
   const earlierFeedback = feedbackRounds.slice(0, -1);
 
@@ -209,18 +266,39 @@ export default function CaseSessionPage() {
     setGrading(true);
 
     try {
-      const res = await fetch("/api/case/grade", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, step: currentStep, decision })
-      });
+      let data: Grade | null = null;
+      let lastErr: unknown = null;
 
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await fetch("/api/case/grade", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, step: currentStep, decision })
+          });
+
+          if (!res.ok) {
+            const msg = await res.text();
+            if (res.status >= 500 && attempt < 3) {
+              lastErr = new Error(msg);
+              await new Promise((resolve) => setTimeout(resolve, attempt * 200));
+              continue;
+            }
+            throw new Error(msg);
+          }
+
+          data = (await res.json()) as Grade;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 3) throw err;
+          await new Promise((resolve) => setTimeout(resolve, attempt * 200));
+        }
       }
 
-      const data = (await res.json()) as Grade;
+      if (!data) {
+        throw lastErr instanceof Error ? lastErr : new Error("Failed to grade decision");
+      }
       setFeedbackRounds((prev) => [...prev, { round, user: decision, grade: data }]);
 
       if (round === PRE_MUTATION_STEPS && !mutation) {
@@ -290,7 +368,7 @@ export default function CaseSessionPage() {
           </div>
 
           <div className="lg:col-span-8 space-y-6">
-            <CaseSummary title={visibleSummary.title} bullets={visibleSummary.bullets} tags={visibleSummary.tags} />
+            <CaseSummary title={visibleSummary.title} bullets={safeSummaryBullets} tags={visibleSummary.tags} />
 
             <div ref={latestFeedbackRef} className="space-y-2">
               {latestFeedback ? (

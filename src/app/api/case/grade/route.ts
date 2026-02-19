@@ -12,6 +12,54 @@ type Payload = {
   };
 };
 
+function buildStepContext(p: any, step: number) {
+  const s = Math.max(1, Math.floor(step || 1));
+  if (s <= 1) {
+    return {
+      visible: [
+        `Age ${p.age}`,
+        `Sex ${p.sex}`,
+        `BMI ${p.bmi}`,
+        `ASCVD=${p.comorbidities.ascvd}`,
+        `HF=${p.comorbidities.hf}`,
+        `CKD=${p.comorbidities.ckd}`,
+        `On metformin=${p.baseline.onMetformin}`
+      ],
+      hidden: ["A1C", "eGFR", "Cost"]
+    };
+  }
+  if (s === 2) {
+    return {
+      visible: [
+        `Age ${p.age}`,
+        `Sex ${p.sex}`,
+        `BMI ${p.bmi}`,
+        `A1C ${p.a1c}`,
+        `ASCVD=${p.comorbidities.ascvd}`,
+        `HF=${p.comorbidities.hf}`,
+        `CKD=${p.comorbidities.ckd}`,
+        `On metformin=${p.baseline.onMetformin}`
+      ],
+      hidden: ["eGFR", "Cost"]
+    };
+  }
+  return {
+    visible: [
+      `Age ${p.age}`,
+      `Sex ${p.sex}`,
+      `BMI ${p.bmi}`,
+      `A1C ${p.a1c}`,
+      `eGFR ${p.egfr}`,
+      `Cost ${p.cost}`,
+      `ASCVD=${p.comorbidities.ascvd}`,
+      `HF=${p.comorbidities.hf}`,
+      `CKD=${p.comorbidities.ckd}`,
+      `On metformin=${p.baseline.onMetformin}`
+    ],
+    hidden: [] as string[]
+  };
+}
+
 export async function POST(req: Request) {
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -26,8 +74,17 @@ export async function POST(req: Request) {
     if (!session) {
       return NextResponse.json({ error: "Unknown session" }, { status: 404 });
     }
+    const expectedStep = Number(session.step ?? 1);
+    const requestedStep = Number(body.step ?? expectedStep);
+    if (requestedStep !== expectedStep) {
+      return NextResponse.json(
+        { error: `Step mismatch: expected ${expectedStep}, got ${requestedStep}` },
+        { status: 409 }
+      );
+    }
 
     const p = session.profile;
+    const stepContext = buildStepContext(p, requestedStep);
 
     const evidence = (session.evidence ?? [])
       .slice(0, 6)
@@ -46,16 +103,10 @@ Learning theory:
 - Interleaving: mention how comorbidities change choice
 
 Patient truth data:
-- Age ${p.age}
-- Sex ${p.sex}
-- BMI ${p.bmi}
-- A1C ${p.a1c}
-- eGFR ${p.egfr}
-- Cost ${p.cost}
-- ASCVD=${p.comorbidities.ascvd}
-- HF=${p.comorbidities.hf}
-- CKD=${p.comorbidities.ckd}
-- On metformin=${p.baseline.onMetformin}
+${stepContext.visible.map((v) => `- ${v}`).join("\n")}
+
+Hidden at this step (do NOT use in reasoning or feedback):
+${stepContext.hidden.length ? stepContext.hidden.map((h) => `- ${h}`).join("\n") : "- (none)"}
 
 Learner decision:
 - Class: ${body.decision.medicationClass}
@@ -72,6 +123,7 @@ Rules:
 - expert.specificDrug MUST always be present.
   If you don’t want to name a drug, set it to "none".
 - expert.bullets: 3–6 bullets, each <= 18 words.
+- Never reference hidden markers, hidden values, or conclusions that require hidden markers.
 `;
 
     const format = {
@@ -125,8 +177,8 @@ Rules:
     let parsed: any = null;
     let lastErr: unknown = null;
 
-    // Retry once to absorb transient model/JSON-shape failures.
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    // Retry to absorb transient model/JSON-shape failures.
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const resp = await openai.responses.create({
           model: "gpt-4.1-mini",
@@ -138,15 +190,14 @@ Rules:
         break;
       } catch (err) {
         lastErr = err;
-        if (attempt === 2) throw err;
+        if (attempt === 3) throw err;
       }
     }
 
     if (!parsed) {
       throw lastErr instanceof Error ? lastErr : new Error("Failed to parse grade response");
     }
-    const current = Number(session.step ?? 1);
-    session.step = Math.min(current + 1, Number(session.totalSteps ?? 5));
+    session.step = Math.min(expectedStep + 1, Number(session.totalSteps ?? 5));
     memory.set(body.sessionId, session);
     return NextResponse.json(parsed);
 
