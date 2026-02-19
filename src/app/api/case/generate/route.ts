@@ -15,7 +15,48 @@ type Profile = {
   baseline: { onMetformin: boolean };
 };
 
-type RagChunk = { id: string; title: string; chunk: string; score?: number };
+type RagChunk = { id: string; title: string; chunk: string; source?: string; score?: number };
+
+const CANONICAL_DOCS = [
+  "diabetes-canada-2024.pdf",
+  "aace-2023-algorithm.pdf",
+  "ada-2026-hospital.pdf",
+  "ada-2026-pharm.pdf",
+  "ada-easd-2022.pdf",
+  "ccs-2022-glp1-sglt2.pdf"
+];
+
+function normalize(s: string) {
+  return s.toLowerCase().trim();
+}
+
+function refForChunk(c: RagChunk): string | null {
+  const source = normalize(c.source ?? "");
+  const title = normalize(c.title ?? "");
+  for (let i = 0; i < CANONICAL_DOCS.length; i++) {
+    const file = normalize(CANONICAL_DOCS[i]);
+    if (source.includes(file) || title.includes(file)) {
+      return `#${i + 1}`;
+    }
+  }
+  return null;
+}
+
+function canonicalEvidenceSnippets(chunks: RagChunk[]) {
+  const byRef = new Map<string, RagChunk>();
+  for (const c of chunks) {
+    const ref = refForChunk(c);
+    if (!ref) continue;
+    if (!byRef.has(ref)) byRef.set(ref, c);
+  }
+
+  return CANONICAL_DOCS.map((file, i) => {
+    const ref = `#${i + 1}`;
+    const hit = byRef.get(ref);
+    if (!hit) return `[${ref} ${file}] (no relevant excerpt retrieved)`;
+    return `[${ref} ${file}] ${hit.chunk}`;
+  }).join("\n\n");
+}
 
 function newSessionId() {
   return Math.random().toString(36).slice(2, 10);
@@ -76,10 +117,7 @@ export async function POST(req: Request) {
     const sessionId = newSessionId();
 
     const chunks = await retrieve(profile);
-    const evidence = chunks
-      .slice(0, 6)
-      .map((c, i) => `[#${i + 1} ${c.title}] ${c.chunk}`)
-      .join("\n\n");
+    const evidence = canonicalEvidenceSnippets(chunks);
 
     const input = `
 You are generating Step 1 of an adaptive clinical case for T2DM pharmacotherapy.
@@ -202,6 +240,11 @@ export async function GET(req: Request) {
     totalSteps: s.totalSteps,
     profileContext: s.profile,
     snapshotComplaints: s.step1Complaints ?? [],
+    evidenceDocs: CANONICAL_DOCS.map((file, i) => ({
+      ref: `#${i + 1}`,
+      title: file,
+      source: file
+    })),
     patient: {
       age: p.age,
       sex: p.sex,

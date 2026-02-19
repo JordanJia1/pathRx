@@ -43,6 +43,10 @@ export async function searchDataset(query: string, k = 6): Promise<IndexedChunk[
       const title =
         typeof c.title === "string"
           ? c.title
+          : typeof c.docTitle === "string"
+            ? c.docTitle
+            : typeof c.file === "string"
+              ? c.file
           : typeof c.source === "string"
             ? c.source
             : "Guideline";
@@ -64,7 +68,14 @@ export async function searchDataset(query: string, k = 6): Promise<IndexedChunk[
         id,
         title,
         chunk,
-        source: c.source,
+        source:
+          typeof c.source === "string"
+            ? c.source
+            : typeof c.file === "string"
+              ? c.file
+              : typeof c.docId === "string"
+                ? c.docId
+                : undefined,
         score: simpleScore(query, `${title}\n${chunk}`)
       } as IndexedChunk;
     })

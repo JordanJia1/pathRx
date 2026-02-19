@@ -24,6 +24,47 @@ type Payload = {
   };
 };
 
+const CANONICAL_DOCS = [
+  "diabetes-canada-2024.pdf",
+  "aace-2023-algorithm.pdf",
+  "ada-2026-hospital.pdf",
+  "ada-2026-pharm.pdf",
+  "ada-easd-2022.pdf",
+  "ccs-2022-glp1-sglt2.pdf"
+];
+
+function normalize(s: string) {
+  return s.toLowerCase().trim();
+}
+
+function refForChunk(c: any): string | null {
+  const source = normalize(typeof c?.source === "string" ? c.source : "");
+  const title = normalize(typeof c?.title === "string" ? c.title : "");
+  for (let i = 0; i < CANONICAL_DOCS.length; i++) {
+    const file = normalize(CANONICAL_DOCS[i]);
+    if (source.includes(file) || title.includes(file)) {
+      return `#${i + 1}`;
+    }
+  }
+  return null;
+}
+
+function canonicalEvidenceSnippets(chunks: any[]) {
+  const byRef = new Map<string, any>();
+  for (const c of chunks ?? []) {
+    const ref = refForChunk(c);
+    if (!ref) continue;
+    if (!byRef.has(ref)) byRef.set(ref, c);
+  }
+
+  return CANONICAL_DOCS.map((file, i) => {
+    const ref = `#${i + 1}`;
+    const hit = byRef.get(ref);
+    if (!hit) return `[${ref} ${file}] (no relevant excerpt retrieved)`;
+    return `[${ref} ${file}] ${String(hit.chunk ?? "")}`;
+  }).join("\n\n");
+}
+
 async function retrieveEvidenceFromProfile(profile: NonNullable<Payload["profileContext"]>) {
   const q = [
     "type 2 diabetes pharmacologic therapy",
@@ -145,10 +186,7 @@ export async function POST(req: Request) {
     const p = session.profile;
     const stepContext = buildStepContext(p, requestedStep);
 
-    const evidence = (session.evidence ?? [])
-      .slice(0, 6)
-      .map((c: any, i: number) => `[#${i + 1} ${c.title}] ${c.chunk}`)
-      .join("\n\n");
+    const evidence = canonicalEvidenceSnippets(session.evidence ?? []);
 
     const input = `
 You are an expert diabetes pharmacotherapy educator.

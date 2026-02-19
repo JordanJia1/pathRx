@@ -17,6 +17,7 @@ type SessionResponse = {
   step: number;
   totalSteps: number;
   snapshotComplaints?: string[];
+  evidenceDocs?: { ref: string; title: string; source?: string }[];
   profileContext?: {
     difficulty: "easy" | "medium" | "hard";
     age: number;
@@ -633,6 +634,24 @@ export default function CaseSessionPage() {
             ))}
           </div>
         </div>
+
+        <Card className="mt-6 rounded-2xl">
+          <CardContent className="p-4">
+            <div className="text-sm font-semibold">Cited documents (#1–#6)</div>
+            <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+              {(session.evidenceDocs ?? []).length ? (
+                (session.evidenceDocs ?? []).map((d) => (
+                  <div key={d.ref}>
+                    <span className="font-medium">{d.ref}</span>: {d.title}
+                    {d.source ? ` (${d.source})` : ""}
+                  </div>
+                ))
+              ) : (
+                <div>No citations available for this case.</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );
