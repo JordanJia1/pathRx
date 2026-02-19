@@ -28,4 +28,3 @@ export function loadIndex(): LexicalIndex {
   cache = raw;
   return cache;
 }
-EOF
