@@ -15,8 +15,63 @@ type SessionResponse = {
   step: number;
   totalSteps: number;
   patient: Patient;
-  summary: { title: string; bullets: string[]; tags: string[] };
+  summary: { title: string; bullets: string[]; tags: string[]; stepPrompt?: string };
 };
+
+type MutationScenario = {
+  patient: Patient;
+  summary: { title: string; bullets: string[]; tags: string[] };
+  stepPrompt: string;
+};
+
+type FeedbackRound = {
+  round: 1 | 2;
+  user: DecisionPayload;
+  grade: Grade;
+};
+
+function buildMutationScenario(session: SessionResponse): MutationScenario {
+  const nextPatient: Patient = {
+    ...session.patient,
+    risk: { ...(session.patient.risk ?? {}) }
+  };
+
+  let mutationLabel = "";
+  if (nextPatient.egfr > 35) {
+    const prev = nextPatient.egfr;
+    nextPatient.egfr = Math.max(15, prev - 25);
+    mutationLabel = `eGFR dropped from ${prev} to ${nextPatient.egfr}.`;
+  } else if (nextPatient.a1c < 10.5) {
+    const prev = nextPatient.a1c;
+    nextPatient.a1c = Number(Math.min(13, prev + 1.4).toFixed(1));
+    mutationLabel = `A1C rose from ${prev}% to ${nextPatient.a1c}%.`;
+  } else if (nextPatient.cost !== "low") {
+    const prev = nextPatient.cost;
+    nextPatient.cost = "low";
+    mutationLabel = `Coverage changed from ${prev} to low-cost formulary only.`;
+  } else {
+    const hadHf = Boolean(nextPatient.risk?.hf);
+    nextPatient.risk = { ...(nextPatient.risk ?? {}), hf: true };
+    mutationLabel = hadHf
+      ? "No new comorbidity; severe hypoglycemia concern now dominates."
+      : "New HF diagnosis is now present.";
+  }
+
+  return {
+    patient: nextPatient,
+    summary: {
+      title: `${session.summary.title} • Mutation`,
+      bullets: [
+        `Clinical update: ${mutationLabel}`,
+        "Re-rank priorities after this single change.",
+        "Choose the next therapy class with updated safety and benefit balance."
+      ],
+      tags: [...session.summary.tags.slice(0, 3), "Mutation step", "Re-prioritize"]
+    },
+    stepPrompt:
+      "Case mutation applied. With this updated marker/status, what is the best next medication class now?"
+  };
+}
 
 export default function CaseSessionPage() {
   const params = useParams<{ sessionId: string }>();
@@ -24,9 +79,8 @@ export default function CaseSessionPage() {
 
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<SessionResponse | null>(null);
-
-  const [userDecision, setUserDecision] = useState<DecisionPayload | null>(null);
-  const [grade, setGrade] = useState<Grade | null>(null);
+  const [mutation, setMutation] = useState<MutationScenario | null>(null);
+  const [feedbackRounds, setFeedbackRounds] = useState<FeedbackRound[]>([]);
   const [grading, setGrading] = useState(false);
 
   // fetch session payload
@@ -57,21 +111,41 @@ export default function CaseSessionPage() {
     };
   }, [sessionId]);
 
+  useEffect(() => {
+    if (session && session.step >= 2 && !mutation) {
+      setMutation(buildMutationScenario(session));
+    }
+  }, [session, mutation]);
+
   const stepPrompt = useMemo(() => {
-    // If you later store stepPrompt in GET response, use it here.
-    return "What is the best next medication class to add?";
-  }, []);
+    if (mutation) return mutation.stepPrompt;
+    return (
+      session?.summary.stepPrompt ?? "What is the best next medication class to add?"
+    );
+  }, [mutation, session?.summary.stepPrompt]);
+
+  const totalSteps = session?.totalSteps ?? 3;
+  const currentStep = Math.min(
+    totalSteps,
+    Math.max(session?.step ?? 1, feedbackRounds.length + 1)
+  );
+  const isComplete = feedbackRounds.length >= 2 || currentStep >= totalSteps;
+  const visiblePatient = mutation ? mutation.patient : session?.patient;
+  const visibleSummary = mutation
+    ? mutation.summary
+    : session?.summary ?? { title: "", bullets: [], tags: [] };
 
   async function submitDecision(decision: DecisionPayload) {
-    setUserDecision(decision);
-    setGrade(null);
+    if (!session) return;
+    if (feedbackRounds.length >= 2) return;
+    const round = (feedbackRounds.length + 1) as 1 | 2;
     setGrading(true);
 
     try {
       const res = await fetch("/api/case/grade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, step: session?.step ?? 1, decision })
+        body: JSON.stringify({ sessionId, step: currentStep, decision })
       });
 
       if (!res.ok) {
@@ -80,13 +154,19 @@ export default function CaseSessionPage() {
       }
 
       const data = (await res.json()) as Grade;
-      setGrade(data);
+      setFeedbackRounds((prev) => [...prev, { round, user: decision, grade: data }]);
+      if (round === 1 && !mutation) {
+        setMutation(buildMutationScenario(session));
+      }
+
       // refresh session so Stepper updates
-const refreshed = await fetch(`/api/case/generate?sessionId=${encodeURIComponent(sessionId)}`);
-if (refreshed.ok) {
-  const s = await refreshed.json();
-  setSession(s);
-}
+      const refreshed = await fetch(
+        `/api/case/generate?sessionId=${encodeURIComponent(sessionId)}`
+      );
+      if (refreshed.ok) {
+        const s = (await refreshed.json()) as SessionResponse;
+        setSession(s);
+      }
 
     } catch (e: any) {
       alert(`Failed to grade:\n\n${e?.message ?? String(e)}`);
@@ -130,29 +210,51 @@ if (refreshed.ok) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="text-sm text-muted-foreground">Clinical case</div>
-            <h1 className="text-2xl font-semibold tracking-tight">{session.summary.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{visibleSummary.title}</h1>
           </div>
-<Stepper current={session.step} total={session.totalSteps} />       </div>
+          <Stepper current={currentStep} total={totalSteps} />
+        </div>
+
+        <AiThinkingBar active={grading} label="Grading your decision…" />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-12">
           <div className="lg:col-span-4 space-y-6">
-            <PatientVisual patient={session.patient} />
+            <PatientVisual patient={visiblePatient} />
           </div>
 
           <div className="lg:col-span-8 space-y-6">
-            <CaseSummary
-              title={session.summary.title}
-              bullets={session.summary.bullets}
-              tags={session.summary.tags}
-            />
+            <CaseSummary title={visibleSummary.title} bullets={visibleSummary.bullets} tags={visibleSummary.tags} />
 
-            <DecisionForm
-              stepPrompt={stepPrompt}
-              onSubmit={submitDecision}
-              disabled={grading}
-            />
+            {mutation ? (
+              <Card className="rounded-2xl border-primary/30">
+                <CardContent className="p-4 text-sm text-muted-foreground">
+                  Mutation active: one patient marker changed. Re-evaluate your treatment choice.
+                </CardContent>
+              </Card>
+            ) : null}
 
-            <FeedbackCompare user={userDecision} grade={grade} />
+            {!isComplete ? (
+              <DecisionForm
+                key={mutation ? "round-2" : "round-1"}
+                stepPrompt={stepPrompt}
+                onSubmit={submitDecision}
+                disabled={grading}
+              />
+            ) : (
+              <Card className="rounded-2xl border-primary/30">
+                <CardContent className="p-4 text-sm text-muted-foreground">
+                  Case complete. You finished both decision rounds.
+                </CardContent>
+              </Card>
+            )}
+
+            {feedbackRounds.length === 0 ? <FeedbackCompare user={null} grade={null} /> : null}
+            {feedbackRounds.map((r) => (
+              <div key={r.round} className="space-y-2">
+                <div className="text-xs text-muted-foreground">Round {r.round} feedback</div>
+                <FeedbackCompare user={r.user} grade={r.grade} />
+              </div>
+            ))}
           </div>
         </div>
       </div>

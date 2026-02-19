@@ -153,7 +153,8 @@ export async function GET(req: Request) {
     summary: {
       title: s.step1.title,
       bullets: s.step1.bullets,
-      tags: s.step1.tags
+      tags: s.step1.tags,
+      stepPrompt: s.step1.stepPrompt
     }
   });
 }
