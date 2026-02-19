@@ -248,7 +248,7 @@ function buildSafeSummaryTags({
   return tags.slice(0, 4);
 }
 
-function buildSafeListItems({
+function sanitizeStepList({
   currentStep,
   hiddenFields,
   source
@@ -272,6 +272,19 @@ function buildSafeListItems({
       return out;
     });
 
+  return safe.slice(0, 3);
+}
+
+function buildSafePresentingComplaints({
+  currentStep,
+  hiddenFields,
+  source
+}: {
+  currentStep: number;
+  hiddenFields: VitalField[];
+  source: string[];
+}) {
+  const safe = sanitizeStepList({ currentStep, hiddenFields, source });
   if (currentStep <= 1) {
     return [
       "Focused initial complaint assessment with limited objective data.",
@@ -280,12 +293,36 @@ function buildSafeListItems({
   }
   if (currentStep === 2) {
     return [
-      "Now integrate A1C into symptom/complaint interpretation.",
-      "Refine the plan while major constraints remain hidden."
+      "Now integrate A1C into symptom and complaint interpretation.",
+      "Refine the differential while renal and cost details remain hidden."
     ];
   }
+  return safe.length ? safe : ["Use released findings only and document uncertainty."];
+}
 
-  return safe.length ? safe.slice(0, 3) : ["Use released findings only and document uncertainty."];
+function buildSafeManagementGoals({
+  currentStep,
+  hiddenFields,
+  source
+}: {
+  currentStep: number;
+  hiddenFields: VitalField[];
+  source: string[];
+}) {
+  const safe = sanitizeStepList({ currentStep, hiddenFields, source });
+  if (currentStep <= 1) {
+    return [
+      "Set immediate glycemic safety priorities with incomplete data.",
+      "Define what additional data is required before long-term intensification."
+    ];
+  }
+  if (currentStep === 2) {
+    return [
+      "Adjust medium-term glycemic target planning with new A1C data.",
+      "Preserve flexibility until kidney function and cost constraints are released."
+    ];
+  }
+  return safe.length ? safe : ["Balance efficacy, safety, adherence, and long-term durability."];
 }
 
 export default function CaseSessionPage() {
@@ -373,12 +410,12 @@ export default function CaseSessionPage() {
     hiddenFields,
     sourceTags: visibleSummary.tags
   });
-  const safePresentingComplaints = buildSafeListItems({
+  const safePresentingComplaints = buildSafePresentingComplaints({
     currentStep,
     hiddenFields,
     source: visibleSummary.presentingComplaints ?? []
   });
-  const safeManagementGoals = buildSafeListItems({
+  const safeManagementGoals = buildSafeManagementGoals({
     currentStep,
     hiddenFields,
     source: visibleSummary.managementGoals ?? []
