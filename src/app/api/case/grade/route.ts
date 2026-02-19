@@ -122,16 +122,32 @@ Rules:
       }
     } as const;
 
-    const resp = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input,
-      text: { format }
-    });
+    let parsed: any = null;
+    let lastErr: unknown = null;
 
-    const parsed = JSON.parse(resp.output_text);
+    // Retry once to absorb transient model/JSON-shape failures.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const resp = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          input,
+          text: { format }
+        });
+
+        parsed = JSON.parse(resp.output_text);
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 2) throw err;
+      }
+    }
+
+    if (!parsed) {
+      throw lastErr instanceof Error ? lastErr : new Error("Failed to parse grade response");
+    }
     const current = Number(session.step ?? 1);
-session.step = Math.min(current + 1, Number(session.totalSteps ?? 3));
-memory.set(body.sessionId, session);
+    session.step = Math.min(current + 1, Number(session.totalSteps ?? 3));
+    memory.set(body.sessionId, session);
     return NextResponse.json(parsed);
 
   } catch (e: any) {
