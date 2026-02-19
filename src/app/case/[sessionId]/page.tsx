@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AiThinkingBar } from "@/components/ai-thinking-bar";
@@ -8,6 +9,7 @@ import { CaseSummary } from "@/components/case-summary";
 import { DecisionForm, type DecisionPayload } from "@/components/decision-form";
 import { FeedbackCompare, type Grade } from "@/components/feedback-compare";
 import { Stepper } from "@/components/stepper";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 type SessionResponse = {
@@ -22,6 +24,7 @@ type MutationScenario = {
   patient: Patient;
   summary: { title: string; bullets: string[]; tags: string[] };
   stepPrompt: string;
+  change: { label: string; before: string; after: string };
 };
 
 type FeedbackRound = {
@@ -37,24 +40,34 @@ function buildMutationScenario(session: SessionResponse): MutationScenario {
   };
 
   let mutationLabel = "";
+  let change = { label: "Clinical status", before: "", after: "" };
   if (nextPatient.egfr > 35) {
     const prev = nextPatient.egfr;
     nextPatient.egfr = Math.max(15, prev - 25);
     mutationLabel = `eGFR dropped from ${prev} to ${nextPatient.egfr}.`;
+    change = { label: "eGFR", before: String(prev), after: String(nextPatient.egfr) };
   } else if (nextPatient.a1c < 10.5) {
     const prev = nextPatient.a1c;
     nextPatient.a1c = Number(Math.min(13, prev + 1.4).toFixed(1));
     mutationLabel = `A1C rose from ${prev}% to ${nextPatient.a1c}%.`;
+    change = { label: "A1C", before: `${prev}%`, after: `${nextPatient.a1c}%` };
   } else if (nextPatient.cost !== "low") {
     const prev = nextPatient.cost;
     nextPatient.cost = "low";
     mutationLabel = `Coverage changed from ${prev} to low-cost formulary only.`;
+    change = { label: "Cost", before: prev, after: "low" };
   } else {
     const hadHf = Boolean(nextPatient.risk?.hf);
-    nextPatient.risk = { ...(nextPatient.risk ?? {}), hf: true };
-    mutationLabel = hadHf
-      ? "No new comorbidity; severe hypoglycemia concern now dominates."
-      : "New HF diagnosis is now present.";
+    if (!hadHf) {
+      nextPatient.risk = { ...(nextPatient.risk ?? {}), hf: true };
+      mutationLabel = "New HF diagnosis is now present.";
+      change = { label: "HF", before: "absent", after: "present" };
+    } else {
+      const prev = nextPatient.bmi;
+      nextPatient.bmi = Math.min(50, prev + 3);
+      mutationLabel = `BMI increased from ${prev} to ${nextPatient.bmi}.`;
+      change = { label: "BMI", before: String(prev), after: String(nextPatient.bmi) };
+    }
   }
 
   return {
@@ -69,7 +82,8 @@ function buildMutationScenario(session: SessionResponse): MutationScenario {
       tags: [...session.summary.tags.slice(0, 3), "Mutation step", "Re-prioritize"]
     },
     stepPrompt:
-      "Case mutation applied. With this updated marker/status, what is the best next medication class now?"
+      "Case mutation applied. With this updated marker/status, what is the best next medication class now?",
+    change
   };
 }
 
@@ -226,9 +240,23 @@ export default function CaseSessionPage() {
             <CaseSummary title={visibleSummary.title} bullets={visibleSummary.bullets} tags={visibleSummary.tags} />
 
             {mutation ? (
-              <Card className="rounded-2xl border-primary/30">
-                <CardContent className="p-4 text-sm text-muted-foreground">
-                  Mutation active: one patient marker changed. Re-evaluate your treatment choice.
+              <Card className="rounded-2xl border-amber-500/60 bg-amber-50 shadow-sm ring-2 ring-amber-400/50">
+                <CardContent className="space-y-3 p-4">
+                  <div className="text-sm font-semibold text-amber-900">Mutation Applied</div>
+                  <div className="text-sm text-amber-900">
+                    One key marker changed. Re-evaluate your treatment decision.
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded-full border border-amber-700/30 bg-white px-2 py-1 font-medium text-amber-900">
+                      {mutation.change.label}
+                    </span>
+                    <span className="rounded-full border border-amber-700/20 bg-white px-2 py-1 text-amber-900">
+                      Before: {mutation.change.before}
+                    </span>
+                    <span className="rounded-full border border-amber-700/20 bg-amber-200/70 px-2 py-1 font-medium text-amber-950">
+                      After: {mutation.change.after}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
             ) : null}
@@ -242,8 +270,18 @@ export default function CaseSessionPage() {
               />
             ) : (
               <Card className="rounded-2xl border-primary/30">
-                <CardContent className="p-4 text-sm text-muted-foreground">
-                  Case complete. You finished both decision rounds.
+                <CardContent className="space-y-4 p-4">
+                  <div className="text-sm text-muted-foreground">
+                    Case complete. You finished both decision rounds.
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <Link href="/">
+                      <Button variant="outline">Home</Button>
+                    </Link>
+                    <Link href="/case/new">
+                      <Button>Next case</Button>
+                    </Link>
+                  </div>
                 </CardContent>
               </Card>
             )}

@@ -36,26 +36,14 @@ export function DecisionForm({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">Medication class</div>
-            <Input
-              placeholder="e.g., SGLT2 inhibitor, GLP-1 RA"
-              value={medicationClass}
-              onChange={(e) => setMedicationClass(e.target.value)}
-              disabled={disabled}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">Specific drug (optional)</div>
-            <Input
-              placeholder="e.g., empagliflozin"
-              value={specificDrug}
-              onChange={(e) => setSpecificDrug(e.target.value)}
-              disabled={disabled}
-            />
-          </div>
+        <div className="space-y-1">
+          <div className="text-xs text-muted-foreground">Medication class</div>
+          <Input
+            placeholder="e.g., SGLT2 inhibitor, GLP-1 RA"
+            value={medicationClass}
+            onChange={(e) => setMedicationClass(e.target.value)}
+            disabled={disabled}
+          />
         </div>
 
         <div className="space-y-1">
@@ -70,6 +58,16 @@ export function DecisionForm({
           <div className="text-xs text-muted-foreground">
             Tip: keep it short (cognitive load). Mention ASCVD/HF/CKD and cost if relevant.
           </div>
+        </div>
+
+        <div className="space-y-1">
+          <div className="text-xs text-muted-foreground">Specific drug (optional)</div>
+          <Input
+            placeholder="e.g., empagliflozin"
+            value={specificDrug}
+            onChange={(e) => setSpecificDrug(e.target.value)}
+            disabled={disabled}
+          />
         </div>
 
         <div className="flex justify-end">
