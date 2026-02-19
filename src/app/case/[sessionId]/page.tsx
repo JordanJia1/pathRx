@@ -125,8 +125,7 @@ export default function CaseSessionPage() {
             <div className="text-sm text-muted-foreground">Clinical case</div>
             <h1 className="text-2xl font-semibold tracking-tight">{session.summary.title}</h1>
           </div>
-          <Stepper step={session.step} totalSteps={session.totalSteps} />
-        </div>
+<Stepper current={session.step} total={session.totalSteps} />        </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-12">
           <div className="lg:col-span-4 space-y-6">
