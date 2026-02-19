@@ -1,65 +1,104 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl border border-border bg-card shadow-sm">
+              <span className="text-lg font-bold">Rx</span>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">PathRx</div>
+              <div className="text-lg font-semibold">Adaptive Clinical Cases</div>
+            </div>
+          </div>
+          <Badge className="hidden sm:inline-flex">T2D Pharmacotherapy • Step-based</Badge>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="mt-10 grid gap-6 lg:grid-cols-12">
+          <Card className="lg:col-span-7">
+            <CardHeader>
+              <CardTitle className="text-3xl tracking-tight">
+                Train like rounds: one decision at a time.
+              </CardTitle>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Minimal text. High-yield bullets. Immediate feedback. Built for cognitive load,
+                interleaving, and script formation.
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Card className="p-4">
+                  <div className="text-xs text-muted-foreground">Cognitive Load</div>
+                  <div className="mt-1 text-sm font-medium">Chunked steps</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Only what you need, now.</div>
+                </Card>
+                <Card className="p-4">
+                  <div className="text-xs text-muted-foreground">Interleaving</div>
+                  <div className="mt-1 text-sm font-medium">Mixed scenarios</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Switch contexts to learn faster.</div>
+                </Card>
+                <Card className="p-4">
+                  <div className="text-xs text-muted-foreground">Script Theory</div>
+                  <div className="mt-1 text-sm font-medium">Clinical scripts</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Patterns → plan → action.</div>
+                </Card>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <Link href="/case/new">
+                  <Button className="rounded-xl">New Case</Button>
+                </Link>
+                <Link href="/case/new?mode=random">
+                  <Button variant="outline" className="rounded-xl">
+                    Random Case
+                  </Button>
+                </Link>
+                <span className="text-xs text-muted-foreground">
+                  Tip: choose “Hard” to practice edge cases and contraindications.
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-5">
+            <CardHeader>
+              <CardTitle className="text-lg">How it works</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                A 2–4 step case. You answer. We grade and show expert reasoning side-by-side.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="text-xs text-muted-foreground">Step 1</div>
+                <div className="text-sm font-medium">Pick next therapy class</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Based on comorbidities + A1C + kidney function.
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="text-xs text-muted-foreground">Step 2</div>
+                <div className="text-sm font-medium">Dose / safety / monitoring</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Avoid common pitfalls (eGFR, hypoglycemia, cost).
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="text-xs text-muted-foreground">End</div>
+                <div className="text-sm font-medium">Compare with expert</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Your rationale vs. expert bullets + key takeaways.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
