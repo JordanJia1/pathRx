@@ -170,6 +170,48 @@ function buildSafeSummaryBullets({
     : ["Use the released data only and avoid assumptions from locked markers."];
 }
 
+function buildSafeSummaryTags({
+  currentStep,
+  hiddenFields,
+  sourceTags
+}: {
+  currentStep: number;
+  hiddenFields: VitalField[];
+  sourceTags: string[];
+}) {
+  const hidden = new Set(hiddenFields);
+  const answerHint =
+    /(sglt2|glp-?1|dpp-?4|insulin|sulfonylurea|metformin|pioglitazone|drug|first[- ]line|preferred)/i;
+  const leakedVital =
+    (hidden.has("a1c") && /\ba1c\b/i) ||
+    (hidden.has("egfr") && /\begfr\b|\bkidney\b/i) ||
+    (hidden.has("cost") && /\bcost\b|\bformulary\b|\bcoverage\b/i);
+
+  if (currentStep <= 1) return ["Triage", "Limited data", "Initial intervention"];
+  if (currentStep === 2) return ["A1C released", "Partial data", "Re-evaluate"];
+  if (currentStep === 3) return ["Full baseline", "Risk-benefit", "Access considerations"];
+
+  const tags = sourceTags
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !answerHint.test(t))
+    .filter((t) => {
+      if (hidden.has("a1c") && /\ba1c\b/i.test(t)) return false;
+      if (hidden.has("egfr") && (/\begfr\b/i.test(t) || /\bkidney\b/i.test(t))) return false;
+      if (
+        hidden.has("cost") &&
+        (/\bcost\b/i.test(t) || /\bformulary\b/i.test(t) || /\bcoverage\b/i.test(t))
+      )
+        return false;
+      return true;
+    });
+
+  if (!tags.length || leakedVital) {
+    return ["Step-focused", "Use released data", "Clinical reasoning"];
+  }
+  return tags.slice(0, 4);
+}
+
 export default function CaseSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
@@ -249,6 +291,11 @@ export default function CaseSessionPage() {
     patient: visiblePatient,
     hiddenFields,
     sourceBullets: visibleSummary.bullets
+  });
+  const safeSummaryTags = buildSafeSummaryTags({
+    currentStep,
+    hiddenFields,
+    sourceTags: visibleSummary.tags
   });
   const latestFeedback = feedbackRounds[feedbackRounds.length - 1];
   const earlierFeedback = feedbackRounds.slice(0, -1);
@@ -368,7 +415,7 @@ export default function CaseSessionPage() {
           </div>
 
           <div className="lg:col-span-8 space-y-6">
-            <CaseSummary title={visibleSummary.title} bullets={safeSummaryBullets} tags={visibleSummary.tags} />
+            <CaseSummary title={visibleSummary.title} bullets={safeSummaryBullets} tags={safeSummaryTags} />
 
             <div ref={latestFeedbackRef} className="space-y-2">
               {latestFeedback ? (
