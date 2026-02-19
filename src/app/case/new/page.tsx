@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import NewCaseClient from "./new-case-client";
+import { AiThinkingBar } from "@/components/ai-thinking-bar";
 
 export default function NewCasePage() {
   return (

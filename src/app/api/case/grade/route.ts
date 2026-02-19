@@ -129,7 +129,11 @@ Rules:
     });
 
     const parsed = JSON.parse(resp.output_text);
+    const current = Number(session.step ?? 1);
+session.step = Math.min(current + 1, Number(session.totalSteps ?? 3));
+memory.set(body.sessionId, session);
     return NextResponse.json(parsed);
+
   } catch (e: any) {
     console.error("case/grade error:", e);
     return NextResponse.json(

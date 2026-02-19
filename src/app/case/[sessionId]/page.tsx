@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-
+import { AiThinkingBar } from "@/components/ai-thinking-bar";
 import { PatientVisual, type Patient } from "@/components/patient-visual";
 import { CaseSummary } from "@/components/case-summary";
 import { DecisionForm, type DecisionPayload } from "@/components/decision-form";
@@ -81,6 +81,13 @@ export default function CaseSessionPage() {
 
       const data = (await res.json()) as Grade;
       setGrade(data);
+      // refresh session so Stepper updates
+const refreshed = await fetch(`/api/case/generate?sessionId=${encodeURIComponent(sessionId)}`);
+if (refreshed.ok) {
+  const s = await refreshed.json();
+  setSession(s);
+}
+
     } catch (e: any) {
       alert(`Failed to grade:\n\n${e?.message ?? String(e)}`);
     } finally {
@@ -125,7 +132,7 @@ export default function CaseSessionPage() {
             <div className="text-sm text-muted-foreground">Clinical case</div>
             <h1 className="text-2xl font-semibold tracking-tight">{session.summary.title}</h1>
           </div>
-<Stepper current={session.step} total={session.totalSteps} />        </div>
+<Stepper current={session.step} total={session.totalSteps} />       </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-12">
           <div className="lg:col-span-4 space-y-6">

@@ -12,6 +12,7 @@ export function AiThinkingBar({ active, label }: { active: boolean; label?: stri
       return;
     }
 
+    // fake progress: ramps up to ~92% and waits there until done
     setV(8);
     const id = setInterval(() => {
       setV((prev) => {
@@ -34,7 +35,7 @@ export function AiThinkingBar({ active, label }: { active: boolean; label?: stri
       </div>
       <Progress value={v} />
       <div className="mt-2 text-xs text-muted-foreground">
-        Retrieving guideline evidence → generating concise output → validating JSON.
+        Keeping output concise (cognitive load), pulling guideline evidence, then generating JSON.
       </div>
     </div>
   );
