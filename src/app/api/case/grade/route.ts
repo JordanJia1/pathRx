@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 import { openai } from "@/lib/openai";
 import { memory } from "@/lib/session/memory";
+import { searchDataset } from "@/lib/dataset/search";
 
 type Payload = {
   sessionId: string;
   step: number;
+  profileContext?: {
+    difficulty: "easy" | "medium" | "hard";
+    age: number;
+    sex: "male" | "female";
+    bmi: number;
+    a1c: number;
+    egfr: number;
+    cost: "low" | "medium" | "high";
+    comorbidities: { ascvd: boolean; hf: boolean; ckd: boolean };
+    baseline: { onMetformin: boolean };
+  };
   decision: {
     medicationClass: string;
     specificDrug?: string;
@@ -12,15 +24,60 @@ type Payload = {
   };
 };
 
+async function retrieveEvidenceFromProfile(profile: NonNullable<Payload["profileContext"]>) {
+  const q = [
+    "type 2 diabetes pharmacologic therapy",
+    profile.baseline.onMetformin ? "metformin add-on" : "initial therapy",
+    profile.comorbidities.ascvd ? "ASCVD" : "",
+    profile.comorbidities.hf ? "heart failure" : "",
+    profile.comorbidities.ckd ? "CKD albuminuria eGFR" : "",
+    `A1C ${profile.a1c}`,
+    `eGFR ${profile.egfr}`,
+    `cost ${profile.cost}`
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return searchDataset(q, 6);
+}
+
+function applyMutationToProfile(p: any) {
+  const next = {
+    ...p,
+    comorbidities: { ...(p.comorbidities ?? {}) }
+  };
+
+  if (next.egfr > 35) {
+    next.egfr = Math.max(15, next.egfr - 25);
+    return next;
+  }
+  if (next.a1c < 10.5) {
+    next.a1c = Number(Math.min(13, next.a1c + 1.4).toFixed(1));
+    return next;
+  }
+  if (next.cost !== "low") {
+    next.cost = "low";
+    return next;
+  }
+  if (!next.comorbidities.hf) {
+    next.comorbidities.hf = true;
+    return next;
+  }
+
+  next.bmi = Math.min(50, next.bmi + 3);
+  return next;
+}
+
 function buildStepContext(p: any, step: number) {
   const s = Math.max(1, Math.floor(step || 1));
+  const data = s >= 4 ? applyMutationToProfile(p) : p;
   if (s <= 1) {
     return {
       visible: [
-        `Age ${p.age}`,
-        `Sex ${p.sex}`,
-        `BMI ${p.bmi}`,
-        `On metformin=${p.baseline.onMetformin}`
+        `Age ${data.age}`,
+        `Sex ${data.sex}`,
+        `BMI ${data.bmi}`,
+        `On metformin=${data.baseline.onMetformin}`
       ],
       hidden: ["A1C", "eGFR", "Cost", "ASCVD", "HF", "CKD"]
     };
@@ -28,24 +85,24 @@ function buildStepContext(p: any, step: number) {
   if (s === 2) {
     return {
       visible: [
-        `Age ${p.age}`,
-        `Sex ${p.sex}`,
-        `BMI ${p.bmi}`,
-        `A1C ${p.a1c}`,
-        `On metformin=${p.baseline.onMetformin}`
+        `Age ${data.age}`,
+        `Sex ${data.sex}`,
+        `BMI ${data.bmi}`,
+        `A1C ${data.a1c}`,
+        `On metformin=${data.baseline.onMetformin}`
       ],
       hidden: ["eGFR", "Cost", "ASCVD", "HF", "CKD"]
     };
   }
   return {
     visible: [
-      `Age ${p.age}`,
-      `Sex ${p.sex}`,
-      `BMI ${p.bmi}`,
-      `A1C ${p.a1c}`,
-      `eGFR ${p.egfr}`,
-      `Cost ${p.cost}`,
-      `On metformin=${p.baseline.onMetformin}`
+      `Age ${data.age}`,
+      `Sex ${data.sex}`,
+      `BMI ${data.bmi}`,
+      `A1C ${data.a1c}`,
+      `eGFR ${data.egfr}`,
+      `Cost ${data.cost}`,
+      `On metformin=${data.baseline.onMetformin}`
     ],
     hidden: ["ASCVD", "HF", "CKD"] as string[]
   };
@@ -61,9 +118,20 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json()) as Payload;
-    const session = memory.get(body.sessionId);
+    let session = memory.get(body.sessionId);
     if (!session) {
-      return NextResponse.json({ error: "Unknown session" }, { status: 404 });
+      if (!body.profileContext) {
+        return NextResponse.json({ error: "Unknown session" }, { status: 404 });
+      }
+
+      const fallbackEvidence = await retrieveEvidenceFromProfile(body.profileContext);
+      session = {
+        profile: body.profileContext,
+        step: Math.max(1, Number(body.step ?? 1)),
+        totalSteps: 5,
+        evidence: fallbackEvidence
+      };
+      memory.set(body.sessionId, session);
     }
     const expectedStep = Number(session.step ?? 1);
     const requestedStep = Number(body.step ?? expectedStep);
@@ -116,6 +184,8 @@ Rules:
 - expert.bullets: 3–6 bullets, each <= 18 words.
 - Never reference hidden markers, hidden values, or conclusions that require hidden markers.
 - Do not infer, assume, or mention comorbidity status unless explicitly visible.
+- Use only the provided guideline evidence. If evidence is insufficient, state that explicitly.
+- evidenceUsed must reference only the provided snippet IDs (#1..#6).
 `;
 
     const format = {
@@ -146,6 +216,13 @@ Rules:
             minItems: 2,
             maxItems: 5
           },
+          evidenceUsed: {
+            type: "array",
+            items: { type: "string", enum: ["#1", "#2", "#3", "#4", "#5", "#6"] },
+            minItems: 1,
+            maxItems: 4
+          },
+          datasetNote: { type: "string" },
           rubric: {
             type: "array",
             minItems: 3,
@@ -162,7 +239,7 @@ Rules:
             }
           }
         },
-        required: ["expert", "takeaways", "rubric"]
+        required: ["expert", "takeaways", "evidenceUsed", "datasetNote", "rubric"]
       }
     } as const;
 

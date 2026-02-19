@@ -56,7 +56,7 @@ export function DecisionForm({
             disabled={disabled}
           />
           <div className="text-xs text-muted-foreground">
-            Tip: keep it short (cognitive load). Mention ASCVD/HF/CKD and cost if relevant.
+            Tip: keep it short (cognitive load). Use only currently released markers.
           </div>
         </div>
 

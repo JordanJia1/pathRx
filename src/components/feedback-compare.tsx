@@ -11,6 +11,8 @@ export type Decision = {
 export type Grade = {
   expert: { medicationClass: string; specificDrug?: string; bullets: string[] };
   takeaways: string[];
+  evidenceUsed?: string[];
+  datasetNote?: string;
   rubric: { label: string; verdict: "met" | "partial" | "missed"; note: string }[];
 };
 
@@ -73,6 +75,20 @@ export function FeedbackCompare({
 
         <div className="lg:col-span-2">
           <Separator className="my-2" />
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-sm font-semibold">Dataset grounding</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(grade.evidenceUsed ?? []).length ? (
+                (grade.evidenceUsed ?? []).map((r) => <Badge key={r}>{r}</Badge>)
+              ) : (
+                <Badge>No refs</Badge>
+              )}
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {grade.datasetNote ?? "Feedback constrained to provided dataset evidence only."}
+            </div>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-border bg-card p-4">
               <div className="text-sm font-semibold">Script cues (Cue → Pattern → Action)</div>

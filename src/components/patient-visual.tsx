@@ -17,10 +17,14 @@ type VitalField = "a1c" | "egfr" | "bmi" | "cost";
 
 export function PatientVisual({
   patient,
-  hiddenFields
+  hiddenFields,
+  showRiskTags = true,
+  complaints
 }: {
   patient?: Patient;
   hiddenFields?: VitalField[];
+  showRiskTags?: boolean;
+  complaints?: string[];
 }) {
   if (!patient) {
     return (
@@ -34,9 +38,9 @@ export function PatientVisual({
   }
 
   const tags: string[] = [];
-  if (patient.risk?.ascvd) tags.push("ASCVD");
-  if (patient.risk?.hf) tags.push("HF");
-  if (patient.risk?.ckd) tags.push("CKD");
+  if (showRiskTags && patient.risk?.ascvd) tags.push("ASCVD");
+  if (showRiskTags && patient.risk?.hf) tags.push("HF");
+  if (showRiskTags && patient.risk?.ckd) tags.push("CKD");
   if (patient.onMetformin) tags.push("On metformin");
   const hidden = new Set(hiddenFields ?? []);
   const value = (field: VitalField, text: string) =>
@@ -50,7 +54,7 @@ export function PatientVisual({
     );
 
   return (
-    <Card className="rounded-2xl">
+    <Card className="rounded-2xl border-sky-400/60 bg-gradient-to-br from-sky-50 to-background shadow-md ring-1 ring-sky-300/40">
       <CardHeader>
         <CardTitle className="text-base">Patient snapshot</CardTitle>
         <p className="text-sm text-muted-foreground">Quick visual cues (script theory).</p>
@@ -58,27 +62,27 @@ export function PatientVisual({
 
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-sky-300/40 bg-white p-3 shadow-sm">
             <div className="text-xs text-muted-foreground">Age</div>
             <div className="font-medium">{patient.age}</div>
           </div>
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-sky-300/40 bg-white p-3 shadow-sm">
             <div className="text-xs text-muted-foreground">Sex</div>
             <div className="font-medium">{patient.sex}</div>
           </div>
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-sky-300/40 bg-white p-3 shadow-sm">
             <div className="text-xs text-muted-foreground">A1C</div>
             <div className="font-medium">{value("a1c", `${patient.a1c}%`)}</div>
           </div>
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-sky-300/40 bg-white p-3 shadow-sm">
             <div className="text-xs text-muted-foreground">eGFR</div>
             <div className="font-medium">{value("egfr", String(patient.egfr))}</div>
           </div>
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-sky-300/40 bg-white p-3 shadow-sm">
             <div className="text-xs text-muted-foreground">BMI</div>
             <div className="font-medium">{value("bmi", String(patient.bmi))}</div>
           </div>
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-sky-300/40 bg-white p-3 shadow-sm">
             <div className="text-xs text-muted-foreground">Cost</div>
             <div className="font-medium capitalize">{value("cost", patient.cost)}</div>
           </div>
@@ -87,6 +91,17 @@ export function PatientVisual({
         <div className="flex flex-wrap gap-2 pt-1">
           {tags.length ? tags.map((t) => <Badge key={t}>{t}</Badge>) : <Badge>General</Badge>}
         </div>
+
+        {Array.isArray(complaints) && complaints.length ? (
+          <div className="rounded-xl border border-sky-300/40 bg-white p-3 shadow-sm">
+            <div className="text-xs font-medium text-muted-foreground">Step 1 symptoms/complaints</div>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-muted-foreground">
+              {complaints.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

@@ -16,13 +16,40 @@ type SessionResponse = {
   sessionId: string;
   step: number;
   totalSteps: number;
+  snapshotComplaints?: string[];
+  profileContext?: {
+    difficulty: "easy" | "medium" | "hard";
+    age: number;
+    sex: "male" | "female";
+    bmi: number;
+    a1c: number;
+    egfr: number;
+    cost: "low" | "medium" | "high";
+    comorbidities: { ascvd: boolean; hf: boolean; ckd: boolean };
+    baseline: { onMetformin: boolean };
+  };
   patient: Patient;
-  summary: { title: string; bullets: string[]; tags: string[]; stepPrompt?: string };
+  summary: {
+    title: string;
+    bullets: string[];
+    tags: string[];
+    stepPrompt?: string;
+    presentingComplaints?: string[];
+    managementGoals?: string[];
+    evidenceUsed?: string[];
+  };
 };
 
 type MutationScenario = {
   patient: Patient;
-  summary: { title: string; bullets: string[]; tags: string[] };
+  summary: {
+    title: string;
+    bullets: string[];
+    tags: string[];
+    presentingComplaints: string[];
+    managementGoals: string[];
+    evidenceUsed: string[];
+  };
   stepPrompt: string;
   change: { label: string; before: string; after: string };
 };
@@ -85,7 +112,16 @@ function buildMutationScenario(session: SessionResponse): MutationScenario {
         "Re-rank priorities after this single change.",
         "Choose the next therapy class with updated safety and benefit balance."
       ],
-      tags: [...session.summary.tags.slice(0, 3), "Mutation step", "Re-prioritize"]
+      tags: [...session.summary.tags.slice(0, 3), "Mutation step", "Re-prioritize"],
+      presentingComplaints: [
+        "Updated status requires reassessment of current treatment priorities.",
+        "Re-check risk and safety with the newly changed marker."
+      ],
+      managementGoals: [
+        "Maintain durable glycemic control after the change.",
+        "Preserve safety and adherence under the new constraints."
+      ],
+      evidenceUsed: [...(session.summary.evidenceUsed ?? [])]
     },
     stepPrompt:
       "Case mutation applied. With this updated marker/status, what is the best next medication class now?",
@@ -212,6 +248,46 @@ function buildSafeSummaryTags({
   return tags.slice(0, 4);
 }
 
+function buildSafeListItems({
+  currentStep,
+  hiddenFields,
+  source
+}: {
+  currentStep: number;
+  hiddenFields: VitalField[];
+  source: string[];
+}) {
+  const hidden = new Set(hiddenFields);
+  const answerHint =
+    /(sglt2|glp-?1|dpp-?4|insulin|sulfonylurea|metformin|pioglitazone|first[- ]line|preferred)/i;
+  const safe = source
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => !answerHint.test(s))
+    .map((s) => {
+      let out = s;
+      if (hidden.has("a1c")) out = out.replace(/\bA1C\b[^,.;)]+/gi, "A1C [locked]");
+      if (hidden.has("egfr")) out = out.replace(/\beGFR\b[^,.;)]+/gi, "eGFR [locked]");
+      if (hidden.has("cost")) out = out.replace(/\bcost\b[^,.;)]+/gi, "cost [locked]");
+      return out;
+    });
+
+  if (currentStep <= 1) {
+    return [
+      "Focused initial complaint assessment with limited objective data.",
+      "Clarify immediate concerns before selecting escalation strategy."
+    ];
+  }
+  if (currentStep === 2) {
+    return [
+      "Now integrate A1C into symptom/complaint interpretation.",
+      "Refine the plan while major constraints remain hidden."
+    ];
+  }
+
+  return safe.length ? safe.slice(0, 3) : ["Use released findings only and document uncertainty."];
+}
+
 export default function CaseSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
@@ -297,6 +373,16 @@ export default function CaseSessionPage() {
     hiddenFields,
     sourceTags: visibleSummary.tags
   });
+  const safePresentingComplaints = buildSafeListItems({
+    currentStep,
+    hiddenFields,
+    source: visibleSummary.presentingComplaints ?? []
+  });
+  const safeManagementGoals = buildSafeListItems({
+    currentStep,
+    hiddenFields,
+    source: visibleSummary.managementGoals ?? []
+  });
   const latestFeedback = feedbackRounds[feedbackRounds.length - 1];
   const earlierFeedback = feedbackRounds.slice(0, -1);
 
@@ -321,7 +407,12 @@ export default function CaseSessionPage() {
           const res = await fetch("/api/case/grade", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId, step: currentStep, decision })
+            body: JSON.stringify({
+              sessionId,
+              step: currentStep,
+              profileContext: session.profileContext,
+              decision
+            })
           });
 
           if (!res.ok) {
@@ -411,11 +502,22 @@ export default function CaseSessionPage() {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-12">
           <div className="lg:col-span-4 space-y-6">
-            <PatientVisual patient={visiblePatient} hiddenFields={hiddenFields} />
+            <PatientVisual
+              patient={visiblePatient}
+              hiddenFields={hiddenFields}
+              showRiskTags={false}
+              complaints={currentStep === 1 ? session.snapshotComplaints : undefined}
+            />
           </div>
 
           <div className="lg:col-span-8 space-y-6">
-            <CaseSummary title={visibleSummary.title} bullets={safeSummaryBullets} tags={safeSummaryTags} />
+            <CaseSummary
+              title={visibleSummary.title}
+              bullets={safeSummaryBullets}
+              tags={safeSummaryTags}
+              presentingComplaints={safePresentingComplaints}
+              managementGoals={safeManagementGoals}
+            />
 
             <div ref={latestFeedbackRef} className="space-y-2">
               {latestFeedback ? (

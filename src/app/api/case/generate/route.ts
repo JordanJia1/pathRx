@@ -21,6 +21,34 @@ function newSessionId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+function sample<T>(arr: T[], n: number): T[] {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.max(0, Math.min(n, shuffled.length)));
+}
+
+function buildStep1Complaints(profile: Profile): string[] {
+  const core = [
+    "Progressive fatigue over several weeks.",
+    "Intermittent polyuria and increased thirst.",
+    "Concern about rising home glucose readings."
+  ];
+
+  const glycemic = profile.a1c >= 9
+    ? ["Blurred vision by evening.", "Nocturia disrupting sleep."]
+    : ["Post-meal sluggishness.", "Difficulty maintaining energy at work."];
+
+  const renal = profile.egfr < 45
+    ? ["Mild lower-extremity swelling by the end of day."]
+    : ["No edema or dyspnea reported."];
+
+  const cost = profile.cost === "low"
+    ? ["Reports medication affordability concerns."]
+    : ["Wants to simplify regimen while maintaining outcomes."];
+
+  const pool = [...core, ...glycemic, ...renal, ...cost];
+  return sample(pool, 3);
+}
+
 async function retrieve(profile: Profile): Promise<RagChunk[]> {
   const q = [
     "type 2 diabetes pharmacologic therapy",
@@ -61,6 +89,7 @@ Hard constraints:
 - Use bullets only (no paragraphs).
 - Do NOT invent labs or history not provided.
 - Ground choices in evidence snippets.
+- Use only the provided evidence snippets for clinical claims.
 
 Patient truth data:
 - Age: ${profile.age}
@@ -81,6 +110,9 @@ Return strict JSON:
 - tags: 2–6 short tags
 - stepPrompt: one sentence question (choose next medication class)
 - patientVisualHints: 2–5 short script cues (Cue → Pattern)
+- presentingComplaints: 2–4 concise bullets based on evidence + patient data
+- managementGoals: 2–4 concise long-term goals based on evidence + patient data
+- evidenceUsed: 1–4 references from: #1, #2, #3, #4, #5, #6
 `;
 
     const format = {
@@ -94,9 +126,36 @@ Return strict JSON:
           bullets: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 6 },
           tags: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 6 },
           stepPrompt: { type: "string" },
-          patientVisualHints: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 5 }
+          patientVisualHints: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 5 },
+          presentingComplaints: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 2,
+            maxItems: 4
+          },
+          managementGoals: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 2,
+            maxItems: 4
+          },
+          evidenceUsed: {
+            type: "array",
+            items: { type: "string", enum: ["#1", "#2", "#3", "#4", "#5", "#6"] },
+            minItems: 1,
+            maxItems: 4
+          }
         },
-        required: ["title", "bullets", "tags", "stepPrompt", "patientVisualHints"]
+        required: [
+          "title",
+          "bullets",
+          "tags",
+          "stepPrompt",
+          "patientVisualHints",
+          "presentingComplaints",
+          "managementGoals",
+          "evidenceUsed"
+        ]
       }
     } as const;
 
@@ -113,6 +172,7 @@ Return strict JSON:
       step: 1,
       totalSteps: 5,
       step1: parsed,
+      step1Complaints: buildStep1Complaints(profile),
       evidence: chunks
     });
 
@@ -140,6 +200,8 @@ export async function GET(req: Request) {
     sessionId,
     step: s.step,
     totalSteps: s.totalSteps,
+    profileContext: s.profile,
+    snapshotComplaints: s.step1Complaints ?? [],
     patient: {
       age: p.age,
       sex: p.sex,
@@ -154,7 +216,10 @@ export async function GET(req: Request) {
       title: s.step1.title,
       bullets: s.step1.bullets,
       tags: s.step1.tags,
-      stepPrompt: s.step1.stepPrompt
+      stepPrompt: s.step1.stepPrompt,
+      presentingComplaints: s.step1.presentingComplaints ?? [],
+      managementGoals: s.step1.managementGoals ?? [],
+      evidenceUsed: s.step1.evidenceUsed ?? []
     }
   });
 }
