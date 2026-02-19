@@ -146,7 +146,7 @@ Rules:
       throw lastErr instanceof Error ? lastErr : new Error("Failed to parse grade response");
     }
     const current = Number(session.step ?? 1);
-    session.step = Math.min(current + 1, Number(session.totalSteps ?? 3));
+    session.step = Math.min(current + 1, Number(session.totalSteps ?? 5));
     memory.set(body.sessionId, session);
     return NextResponse.json(parsed);
 

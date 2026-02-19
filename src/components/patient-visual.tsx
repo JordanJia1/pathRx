@@ -12,7 +12,15 @@ export type Patient = {
   risk?: { ascvd?: boolean; hf?: boolean; ckd?: boolean };
 };
 
-export function PatientVisual({ patient }: { patient?: Patient }) {
+type VitalField = "a1c" | "egfr" | "bmi" | "cost";
+
+export function PatientVisual({
+  patient,
+  hiddenFields
+}: {
+  patient?: Patient;
+  hiddenFields?: VitalField[];
+}) {
   if (!patient) {
     return (
       <Card className="rounded-2xl">
@@ -29,6 +37,9 @@ export function PatientVisual({ patient }: { patient?: Patient }) {
   if (patient.risk?.hf) tags.push("HF");
   if (patient.risk?.ckd) tags.push("CKD");
   if (patient.onMetformin) tags.push("On metformin");
+  const hidden = new Set(hiddenFields ?? []);
+  const value = (field: VitalField, text: string) =>
+    hidden.has(field) ? <span className="text-muted-foreground">Locked</span> : text;
 
   return (
     <Card className="rounded-2xl">
@@ -49,19 +60,19 @@ export function PatientVisual({ patient }: { patient?: Patient }) {
           </div>
           <div className="rounded-xl border border-border bg-card p-3">
             <div className="text-xs text-muted-foreground">A1C</div>
-            <div className="font-medium">{patient.a1c}%</div>
+            <div className="font-medium">{value("a1c", `${patient.a1c}%`)}</div>
           </div>
           <div className="rounded-xl border border-border bg-card p-3">
             <div className="text-xs text-muted-foreground">eGFR</div>
-            <div className="font-medium">{patient.egfr}</div>
+            <div className="font-medium">{value("egfr", String(patient.egfr))}</div>
           </div>
           <div className="rounded-xl border border-border bg-card p-3">
             <div className="text-xs text-muted-foreground">BMI</div>
-            <div className="font-medium">{patient.bmi}</div>
+            <div className="font-medium">{value("bmi", String(patient.bmi))}</div>
           </div>
           <div className="rounded-xl border border-border bg-card p-3">
             <div className="text-xs text-muted-foreground">Cost</div>
-            <div className="font-medium capitalize">{patient.cost}</div>
+            <div className="font-medium capitalize">{value("cost", patient.cost)}</div>
           </div>
         </div>
 

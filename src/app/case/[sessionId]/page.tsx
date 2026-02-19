@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { AiThinkingBar } from "@/components/ai-thinking-bar";
 import { PatientVisual, type Patient } from "@/components/patient-visual";
@@ -28,10 +28,16 @@ type MutationScenario = {
 };
 
 type FeedbackRound = {
-  round: 1 | 2;
+  round: number;
   user: DecisionPayload;
   grade: Grade;
 };
+
+type VitalField = "a1c" | "egfr" | "bmi" | "cost";
+
+const PRE_MUTATION_STEPS = 3;
+const MUTATION_STEP = 4;
+const COMPLETE_STEP = 5;
 
 function buildMutationScenario(session: SessionResponse): MutationScenario {
   const nextPatient: Patient = {
@@ -87,6 +93,32 @@ function buildMutationScenario(session: SessionResponse): MutationScenario {
   };
 }
 
+function getStepRelease(currentStep: number): {
+  hiddenFields: VitalField[];
+  title: string;
+  note: string;
+} {
+  if (currentStep <= 1) {
+    return {
+      hiddenFields: ["a1c", "egfr", "cost"],
+      title: "Step 1 Release",
+      note: "Initial triage view: age, sex, and BMI only."
+    };
+  }
+  if (currentStep === 2) {
+    return {
+      hiddenFields: ["egfr", "cost"],
+      title: "Step 2 Release",
+      note: "Newly released: A1C. Re-evaluate your intervention."
+    };
+  }
+  return {
+    hiddenFields: [],
+    title: "Step 3 Release",
+    note: "Full baseline vitals released: A1C, eGFR, and cost."
+  };
+}
+
 export default function CaseSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
@@ -96,8 +128,8 @@ export default function CaseSessionPage() {
   const [mutation, setMutation] = useState<MutationScenario | null>(null);
   const [feedbackRounds, setFeedbackRounds] = useState<FeedbackRound[]>([]);
   const [grading, setGrading] = useState(false);
+  const latestFeedbackRef = useRef<HTMLDivElement | null>(null);
 
-  // fetch session payload
   useEffect(() => {
     let cancelled = false;
 
@@ -125,34 +157,55 @@ export default function CaseSessionPage() {
     };
   }, [sessionId]);
 
-  useEffect(() => {
-    if (session && session.step >= 2 && !mutation) {
-      setMutation(buildMutationScenario(session));
-    }
-  }, [session, mutation]);
-
-  const stepPrompt = useMemo(() => {
-    if (mutation) return mutation.stepPrompt;
-    return (
-      session?.summary.stepPrompt ?? "What is the best next medication class to add?"
-    );
-  }, [mutation, session?.summary.stepPrompt]);
-
-  const totalSteps = session?.totalSteps ?? 3;
+  const totalSteps = session?.totalSteps ?? COMPLETE_STEP;
   const currentStep = Math.min(
     totalSteps,
     Math.max(session?.step ?? 1, feedbackRounds.length + 1)
   );
-  const isComplete = feedbackRounds.length >= 2 || currentStep >= totalSteps;
-  const visiblePatient = mutation ? mutation.patient : session?.patient;
-  const visibleSummary = mutation
+
+  useEffect(() => {
+    if (session && currentStep >= MUTATION_STEP && !mutation) {
+      setMutation(buildMutationScenario(session));
+    }
+  }, [session, currentStep, mutation]);
+
+  const stepPrompt = useMemo(() => {
+    if (currentStep === 1) {
+      return "Based on the initial triage vitals, what is your first intervention choice?";
+    }
+    if (currentStep === 2) {
+      return "A1C is now available. Reassess and choose the next intervention.";
+    }
+    if (currentStep === 3) {
+      return "Full baseline vitals are now available. What is your best intervention now?";
+    }
+    if (mutation) return mutation.stepPrompt;
+    return session?.summary.stepPrompt ?? "What is the best next medication class to add?";
+  }, [currentStep, mutation, session?.summary.stepPrompt]);
+
+  const isComplete = currentStep >= COMPLETE_STEP;
+  const isMutationPhase = currentStep >= MUTATION_STEP && !isComplete;
+
+  const visiblePatient = mutation && isMutationPhase ? mutation.patient : session?.patient;
+  const visibleSummary = mutation && isMutationPhase
     ? mutation.summary
     : session?.summary ?? { title: "", bullets: [], tags: [] };
 
+  const release = getStepRelease(Math.min(currentStep, PRE_MUTATION_STEPS));
+  const hiddenFields = isMutationPhase || isComplete ? [] : release.hiddenFields;
+  const latestFeedback = feedbackRounds[feedbackRounds.length - 1];
+  const earlierFeedback = feedbackRounds.slice(0, -1);
+
+  useEffect(() => {
+    if (!latestFeedback) return;
+    latestFeedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [latestFeedback]);
+
   async function submitDecision(decision: DecisionPayload) {
     if (!session) return;
-    if (feedbackRounds.length >= 2) return;
-    const round = (feedbackRounds.length + 1) as 1 | 2;
+    if (isComplete) return;
+
+    const round = currentStep;
     setGrading(true);
 
     try {
@@ -169,11 +222,11 @@ export default function CaseSessionPage() {
 
       const data = (await res.json()) as Grade;
       setFeedbackRounds((prev) => [...prev, { round, user: decision, grade: data }]);
-      if (round === 1 && !mutation) {
+
+      if (round === PRE_MUTATION_STEPS && !mutation) {
         setMutation(buildMutationScenario(session));
       }
 
-      // refresh session so Stepper updates
       const refreshed = await fetch(
         `/api/case/generate?sessionId=${encodeURIComponent(sessionId)}`
       );
@@ -233,13 +286,35 @@ export default function CaseSessionPage() {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-12">
           <div className="lg:col-span-4 space-y-6">
-            <PatientVisual patient={visiblePatient} />
+            <PatientVisual patient={visiblePatient} hiddenFields={hiddenFields} />
           </div>
 
           <div className="lg:col-span-8 space-y-6">
             <CaseSummary title={visibleSummary.title} bullets={visibleSummary.bullets} tags={visibleSummary.tags} />
 
-            {mutation ? (
+            <div ref={latestFeedbackRef} className="space-y-2">
+              {latestFeedback ? (
+                <>
+                  <div className="text-xs text-muted-foreground">
+                    Latest feedback (Step {latestFeedback.round})
+                  </div>
+                  <FeedbackCompare user={latestFeedback.user} grade={latestFeedback.grade} />
+                </>
+              ) : (
+                <FeedbackCompare user={null} grade={null} />
+              )}
+            </div>
+
+            {!isMutationPhase && !isComplete ? (
+              <Card className="rounded-2xl border-sky-400/50 bg-sky-50">
+                <CardContent className="space-y-1 p-4">
+                  <div className="text-sm font-semibold text-sky-900">{release.title}</div>
+                  <div className="text-sm text-sky-900">{release.note}</div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {isMutationPhase && mutation ? (
               <Card className="rounded-2xl border-amber-500/60 bg-amber-50 shadow-sm ring-2 ring-amber-400/50">
                 <CardContent className="space-y-3 p-4">
                   <div className="text-sm font-semibold text-amber-900">Mutation Applied</div>
@@ -263,7 +338,7 @@ export default function CaseSessionPage() {
 
             {!isComplete ? (
               <DecisionForm
-                key={mutation ? "round-2" : "round-1"}
+                key={`round-${currentStep}`}
                 stepPrompt={stepPrompt}
                 onSubmit={submitDecision}
                 disabled={grading}
@@ -272,7 +347,7 @@ export default function CaseSessionPage() {
               <Card className="rounded-2xl border-primary/30">
                 <CardContent className="space-y-4 p-4">
                   <div className="text-sm text-muted-foreground">
-                    Case complete. You finished both decision rounds.
+                    Case complete. You finished all intervention evaluations and mutation reassessment.
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <Link href="/">
@@ -286,10 +361,9 @@ export default function CaseSessionPage() {
               </Card>
             )}
 
-            {feedbackRounds.length === 0 ? <FeedbackCompare user={null} grade={null} /> : null}
-            {feedbackRounds.map((r) => (
-              <div key={r.round} className="space-y-2">
-                <div className="text-xs text-muted-foreground">Round {r.round} feedback</div>
+            {earlierFeedback.map((r) => (
+              <div key={`${r.round}-${r.user.medicationClass}`} className="space-y-2">
+                <div className="text-xs text-muted-foreground">Earlier feedback (Step {r.round})</div>
                 <FeedbackCompare user={r.user} grade={r.grade} />
               </div>
             ))}

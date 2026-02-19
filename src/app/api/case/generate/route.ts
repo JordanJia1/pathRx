@@ -111,7 +111,7 @@ Return strict JSON:
     memory.set(sessionId, {
       profile,
       step: 1,
-      totalSteps: 3,
+      totalSteps: 5,
       step1: parsed,
       evidence: chunks
     });
