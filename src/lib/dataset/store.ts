@@ -1,4 +1,3 @@
-cat > lib/dataset/store.ts <<'EOF'
 import fs from "node:fs";
 import path from "node:path";
 
