@@ -218,7 +218,8 @@ Return STRICT JSON.
 
 Rules:
 - expert.specificDrug MUST always be present.
-  If you don’t want to name a drug, set it to "none".
+  Prefer naming a concrete drug whenever evidence and released markers support one.
+  Use "none" only when evidence is insufficient for a specific agent.
 - expert.bullets: 3–6 bullets, each <= 18 words.
 - Never reference hidden markers, hidden values, or conclusions that require hidden markers.
 - Do not infer, assume, or mention comorbidity status unless explicitly visible.
